@@ -3,21 +3,6 @@ on:
   push:
     tags: ["v*.*.*"]
 jobs:
-  lint-node:
-    name: Run Node.js lint
-    uses: kuba2k2/kuba2k2/.github/workflows/lint-node.yml@master
-  build-node:
-    name: Build Node.js project
-    needs:
-      - lint-node
-    uses: kuba2k2/kuba2k2/.github/workflows/build-node.yml@master
-    with:
-      files: |
-        dist/
-        manifest.json
-        LICENSE
-      output-artifact: firefox-webserial-build-node
-
   lint-clang:
     name: Run Clang lint
     uses: kuba2k2/kuba2k2/.github/workflows/lint-clang.yml@master
@@ -29,32 +14,13 @@ jobs:
     strategy:
       matrix:
         os:
-          - runs-on: windows-latest
-            pio-env: windows_x86
-            post-build: ""
-            output-bin: firefox-webserial.exe
-            output-artifact: firefox-webserial-raw-native-windows-x86
-          - runs-on: ubuntu-latest
-            pio-env: linux_x86_64
+          - runs-on: ubuntu-24.04-arm
+            pio-env: linux_aarch64
             post-build: |
-              cd .pio/build/linux_x86_64/
-              cp firefox-webserial firefox-webserial-linux-x86-64
-            output-bin: firefox-webserial-linux-x86-64
-            output-artifact: firefox-webserial-native-linux-x86-64
-          - runs-on: macos-15
-            pio-env: macos_x86_64
-            post-build: |
-              cd .pio/build/macos_x86_64/
-              cp firefox-webserial firefox-webserial-macos-x86-64
-            output-bin: firefox-webserial-macos-x86-64
-            output-artifact: firefox-webserial-native-macos-x86-64
-          - runs-on: macos-14
-            pio-env: macos_arm64
-            post-build: |
-              cd .pio/build/macos_arm64/
-              cp firefox-webserial firefox-webserial-macos-arm64
-            output-bin: firefox-webserial-macos-arm64
-            output-artifact: firefox-webserial-native-macos-arm64
+              cd .pio/build/linux_aarch64/
+              cp firefox-webserial firefox-webserial-linux-aarch64
+            output-bin: firefox-webserial-linux-aarch64
+            output-artifact: firefox-webserial-native-linux-aarch64
     with:
       runs-on: ${{ matrix.os.runs-on }}
       project-directory: ./native/
@@ -64,67 +30,11 @@ jobs:
         native/.pio/build/${{ matrix.os.pio-env }}/${{ matrix.os.output-bin }}
       output-artifact: ${{ matrix.os.output-artifact }}
 
-  build-nsis:
-    name: Build NSIS installer
-    needs:
-      - build-pio
-    uses: kuba2k2/kuba2k2/.github/workflows/build-nsis.yml@master
-    with:
-      input-artifact: firefox-webserial-raw-native-windows-x86
-      input-path: native/install/
-      script-file: native/install/windows_x86.nsi
-      files: |
-        native/install/firefox-webserial-v*.exe
-      output-artifact: firefox-webserial-native-windows-x86
-
-  release-amo:
-    name: Publish addons.mozilla.org release
-    runs-on: ubuntu-latest
-    needs:
-      - build-node
-    permissions:
-      contents: write
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: firefox-webserial-build-node
-          path: src
-
-      - name: Build Firefox extension
-        id: build
-        uses: kewisch/action-web-ext@v1
-        with:
-          cmd: build
-          source: src
-          filename: "{name}-{version}.xpi"
-
-      - name: Sign Firefox extension
-        id: sign
-        uses: kewisch/action-web-ext@v1
-        with:
-          cmd: sign
-          source: ${{ steps.build.outputs.target }}
-          channel: listed
-          apiKey: ${{ secrets.AMO_SIGN_KEY }}
-          apiSecret: ${{ secrets.AMO_SIGN_SECRET }}
-          timeout: 900000
-
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            ${{ steps.sign.outputs.target }}
-          fail_on_unmatched_files: false
-          generate_release_notes: true
-
   release:
     name: Publish GitHub release
     runs-on: ubuntu-latest
     needs:
       - build-pio
-      - build-nsis
-      - release-amo
     permissions:
       contents: write
     steps:
